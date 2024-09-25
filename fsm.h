@@ -159,8 +159,17 @@ The following example implements this simple state machine.
     { States::A       , States::Final , Triggers::B    , []{return true;} , action2 },
   };
 
+  F::activityMap activities =
+  {
+    {States::A,
+        {[]{std::cout << "State A entered" << std::endl;},  //entry
+        []{std::cout << "State A exited" << std::endl;}}    //exit
+    },
+  };
+
   F fsm;
   fsm.add_transitions(transitions);
+  fsm.add_activities(activities);
   assert(fsm.is_initial());
   fsm.execute(Triggers::A);
   assert(States::A == fsm.state());
@@ -222,6 +231,18 @@ public:
 		actionFn action;
 	};
 
+    // Defines the function prototype for an activity function.
+    using activityFn = std::function<void()>;
+    /**
+     * Defines the activity structure.
+     */
+    struct Activities
+    {
+        activityFn entryActivity;
+        activityFn exitActivity;
+    };
+    using activityMap = std::map<State, Activities>;
+
 private:
 	// Definitions for the structure that holds the transitions.
 	// For good performance on state machines with many transitions, transitions
@@ -230,13 +251,16 @@ private:
 	using transition_elem_t = std::vector<Trans>;
 	using transitions_t = std::map<State, transition_elem_t>;
 	transitions_t m_transitions;
+	activityMap m_activities;
 	// Current state.
 	State m_cs;
 	debugFn m_debug_fn;
 
 public:
 	// Constructor.
-	Fsm() : m_transitions(), m_cs(Initial), m_debug_fn(nullptr) {}
+	Fsm() : m_transitions(), m_activities(), m_cs(Initial), m_debug_fn(nullptr)
+	{
+	}
 
 	/**
 	 * Sets the current state to the given state. Defaults to the Initial state.
@@ -298,6 +322,26 @@ public:
 		add_transitions(std::begin(i), std::end(i));
 	}
 
+
+    /**
+     * Add a map of activities to the state machine.
+     *
+     */
+    void add_activities(activityMap const & state_activities)
+    {
+        m_activities = state_activities;
+    }
+
+    /**
+     * Add a map of activities to the state machine.
+     *
+     */
+    void add_activities(activityMap && state_activities)
+    {
+        m_activities = std::move(state_activities);
+    }
+
+
 	/**
 	 * Adds a function that is called on every state change. The type of the
 	 * function is `debugFn`. It has the following parameters.
@@ -349,7 +393,21 @@ public:
 			if(transition.action != 0) {
 				transition.action(); // execute action
 			}
+
+            // Check if exit activity exists and execute it.
+	        const auto exit_activity = m_activities.find(m_cs);
+	        if(exit_activity != m_activities.end() && exit_activity->second.exitActivity) {
+	            exit_activity->second.exitActivity();
+	        }
+
 			m_cs = transition.to_state;
+
+            // Check if entry activity exists and execute it.
+            const auto entry_activity = m_activities.find(m_cs);
+            if(entry_activity != m_activities.end() && entry_activity->second.entryActivity) {
+                entry_activity->second.entryActivity();
+            }
+			
 			if(m_debug_fn) { m_debug_fn(transition.from_state, transition.to_state, trigger); }
 			break;
 		}
