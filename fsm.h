@@ -182,7 +182,6 @@ The following example implements this simple state machine.
 
 // Includes
 #include <functional>
-#include <limits>
 #include <map>
 #include <vector>
 
@@ -231,17 +230,18 @@ public:
 		actionFn action;
 	};
 
-    // Defines the function prototype for an activity function.
-    using activityFn = std::function<void()>;
-    /**
-     * Defines the activity structure.
-     */
-    struct Activities
-    {
-        activityFn entryActivity;
-        activityFn exitActivity;
-    };
-    using activityMap = std::map<State, Activities>;
+	// Defines the function prototype for an activity function.
+	using activityFn = std::function<void()>;
+	/**
+	 * Defines the activity structure.
+	 */
+	struct Activities
+	{
+		activityFn entryActivity;
+		activityFn doActivity;
+		activityFn exitActivity;
+	};
+	using activityMap = std::map<State, Activities>;
 
 private:
 	// Definitions for the structure that holds the transitions.
@@ -258,9 +258,7 @@ private:
 
 public:
 	// Constructor.
-	Fsm() : m_transitions(), m_activities(), m_cs(Initial), m_debug_fn(nullptr)
-	{
-	}
+	Fsm() : m_transitions(), m_activities(), m_cs(Initial), m_debug_fn(nullptr) {}
 
 	/**
 	 * Sets the current state to the given state. Defaults to the Initial state.
@@ -322,25 +320,23 @@ public:
 		add_transitions(std::begin(i), std::end(i));
 	}
 
+	/**
+	 * Add a map of activities to the state machine.
+	 *
+	 */
+	void add_activities(activityMap const& state_activities)
+	{
+		m_activities = state_activities;
+	}
 
-    /**
-     * Add a map of activities to the state machine.
-     *
-     */
-    void add_activities(activityMap const & state_activities)
-    {
-        m_activities = state_activities;
-    }
-
-    /**
-     * Add a map of activities to the state machine.
-     *
-     */
-    void add_activities(activityMap && state_activities)
-    {
-        m_activities = std::move(state_activities);
-    }
-
+	/**
+	 * Add a map of activities to the state machine.
+	 *
+	 */
+	void add_activities(activityMap&& state_activities)
+	{
+		m_activities = std::move(state_activities);
+	}
 
 	/**
 	 * Adds a function that is called on every state change. The type of the
@@ -394,22 +390,31 @@ public:
 				transition.action(); // execute action
 			}
 
-            // Check if exit activity exists and execute it.
-	        const auto exit_activity = m_activities.find(m_cs);
-	        if(exit_activity != m_activities.end() && exit_activity->second.exitActivity) {
-	            exit_activity->second.exitActivity();
-	        }
+			// Check if exit activity exists and execute it.
+			const auto exit_activity = m_activities.find(m_cs);
+			if(exit_activity != m_activities.end() && exit_activity->second.exitActivity) {
+				exit_activity->second.exitActivity();
+			}
 
 			m_cs = transition.to_state;
 
-            // Check if entry activity exists and execute it.
-            const auto entry_activity = m_activities.find(m_cs);
-            if(entry_activity != m_activities.end() && entry_activity->second.entryActivity) {
-                entry_activity->second.entryActivity();
-            }
-			
+			// Check if entry activity exists and execute it.
+			const auto entry_activity = m_activities.find(m_cs);
+			if(entry_activity != m_activities.end() && entry_activity->second.entryActivity) {
+				entry_activity->second.entryActivity();
+			}
+
 			if(m_debug_fn) { m_debug_fn(transition.from_state, transition.to_state, trigger); }
 			break;
+		}
+
+		// If no transition then do the doActivity of the current state.
+		if(Fsm_NoMatchingTrigger == err_code) {
+			// Check if do activity exists and execute it.
+			const auto do_activity = m_activities.find(m_cs);
+			if(do_activity != m_activities.end() && do_activity->second.doActivity) {
+				do_activity->second.doActivity();
+			}
 		}
 
 		return err_code;
